@@ -1,0 +1,58 @@
+name: testes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ${{ matrix.so }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        so: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # Os juizes desta suite, em ordem de forca:
+      #
+      # 1. A implementacao do PROPRIO SISTEMA OPERACIONAL, pela classe ECDsa do
+      #    .NET. Eu assino e ela verifica; ela assina e eu verifico. Outra gente,
+      #    outra linguagem, nenhum olhar neste codigo. E por isso que a curva
+      #    P-256 existe nesta biblioteca: a secp256k1 nao esta entre as curvas
+      #    nomeadas que o Windows oferece, e sem a P-256 nao haveria com quem
+      #    confrontar.
+      #
+      # 2. Os VETORES PUBLICADOS da RFC 6979, apendice A.2.5. Tudo ali passa por
+      #    HMAC, entao nao existe "quase certo": um bit errado em qualquer peca
+      #    muda o k inteiro.
+      #
+      # 3. Os AXIOMAS DE GRUPO, conferidos no dominio inteiro de uma curva
+      #    pequena, e a forca bruta somando ponto a ponto. Associatividade e
+      #    comutatividade nao dependem de implementacao nenhuma.
+      #
+      # A matriz de tres sistemas nao e enfeite: o provedor de criptografia muda
+      # entre Windows, Linux e macOS, e o confronto com o sistema so vale se
+      # valer nos tres.
+      - name: testes
+        run: dotnet test testes/CurvaEliptica.Testes/CurvaEliptica.Testes.csproj -c Release --nologo -v q
+
+      # As medidas rodam para REGISTRAR numeros. Nao ha asseveracao de tempo, e o
+      # motivo esta no proprio relatorio: nesta familia de maquinas o relogio
+      # sobe conforme o processador esquenta, e o que nao depende disso e a
+      # contagem de operacoes.
+      - name: somas e dobros de cada metodo
+        run: dotnet run --project ferramentas/Medidor/Medidor.csproj -c Release -- escalar
+
+      - name: o que o tempo conta sobre a chave
+        run: dotnet run --project ferramentas/Medidor/Medidor.csproj -c Release -- canal
+
+      - name: o custo de achar o expoente
+        run: dotnet run --project ferramentas/Medidor/Medidor.csproj -c Release -- quebrar
